@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>ヒゲ脱毛ログ | Beard Log</title>
+<meta name="description" content="Beard Log（ヒゲ脱毛ログ）は、医療ヒゲ脱毛の経過を写真と記録で振り返れる個人用アプリです。">
+<meta name="theme-color" content="#0e0d0c">
+
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-32.png" sizes="32x32">
+<link rel="icon" href="icons/icon-192.png" sizes="192x192">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ヒゲ脱毛ログ">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="format-detection" content="telephone=no">
+
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app-shell">
+  <header class="app-header">
+    <span class="app-header-wordmark">ヒゲ脱毛ログ</span>
+    <span class="app-header-subname">Beard Log</span>
+  </header>
+
+  <main id="view-root" class="view-root"></main>
+
+  <nav class="bottom-nav">
+    <a class="nav-item" href="#/home" data-route="/home">
+      <svg viewBox="0 0 24 24" class="nav-icon"><path d="M4 11.5 12 4l8 7.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 10.5V20h12v-9.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>ホーム</span>
+    </a>
+    <a class="nav-item" href="#/progress" data-route="/progress">
+      <svg viewBox="0 0 24 24" class="nav-icon"><path d="M4 19V5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4 19h16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M7 16l3.5-5 3 3L19 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>経過</span>
+    </a>
+    <a class="nav-item" href="#/compare" data-route="/compare">
+      <svg viewBox="0 0 24 24" class="nav-icon"><rect x="3.5" y="5" width="8" height="14" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="12.5" y="5" width="8" height="14" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+      <span>写真比較</span>
+    </a>
+    <a class="nav-item" href="#/history" data-route="/history">
+      <svg viewBox="0 0 24 24" class="nav-icon"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 8v4.5l3 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>履歴</span>
+    </a>
+    <a class="nav-item" href="#/settings" data-route="/settings">
+      <svg viewBox="0 0 24 24" class="nav-icon"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l1.9-1.3-2-3.4-2.2.7a7.7 7.7 0 0 0-2.6-1.5L14 2.5h-4l-.5 2.5a7.7 7.7 0 0 0-2.6 1.5l-2.2-.7-2 3.4L4.6 10.5a7.6 7.6 0 0 0 0 3L2.7 14.8l2 3.4 2.2-.7a7.7 7.7 0 0 0 2.6 1.5l.5 2.5h4l.5-2.5a7.7 7.7 0 0 0 2.6-1.5l2.2.7 2-3.4z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+      <span>設定</span>
+    </a>
+  </nav>
+</div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
