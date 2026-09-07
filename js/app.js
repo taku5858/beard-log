@@ -17,7 +17,13 @@ initRouter(document.getElementById("view-root"));
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("sw.js").catch(() => {});
+    // updateViaCache:"none" を指定し、sw.js自体のHTTPキャッシュを常に無視して
+    // 更新チェックを行う（これがないとホスティング側のキャッシュ次第で
+    // 数時間〜1日、更新が検知されないことがある）
+    navigator.serviceWorker
+      .register("sw.js", { updateViaCache: "none" })
+      .then((reg) => reg.update().catch(() => {}))
+      .catch(() => {});
   });
   // 新しいService Workerが有効になったら1回だけ自動で再読み込みし、
   // 更新後も古いキャッシュ（写真撮影ガイドなど）が表示され続けないようにする

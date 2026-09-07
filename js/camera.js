@@ -2,7 +2,7 @@ import { videoFrameToBlob, fileToProcessedBlob, blobToObjectURL } from "./utils/
 import { angleLabel } from "./constants.js";
 
 const GUIDE_HINT = {
-  front: "鼻下とあごをガイドに合わせてください",
+  front: "鼻下・口・あごをガイドに合わせてください",
   left: "左頬〜あごのヒゲを大きく写してください",
   right: "右頬〜あごのヒゲを大きく写してください",
   chinUnder: "スマホを少し下げて、上を向いてください",
@@ -19,12 +19,12 @@ function svgWrap(inner) {
   return `<svg class="camera-guide-svg" viewBox="0 0 300 500" preserveAspectRatio="xMidYMid slice" fill="none">${inner}</svg>`;
 }
 
-// 正面クローズアップ: 鼻の下端／口の位置／あごの下端 だけを示す3本の目印線
+// 正面クローズアップ: 鼻下（短い水平ライン）／口（中央の小さな目印）／あご（短い水平ライン）の3点だけ
 function frontGuide() {
   return svgWrap(`
-    <path d="M126,64 Q150,78 174,64" stroke="${GUIDE_STROKE}" stroke-width="1.6" stroke-linecap="round" />
-    <line x1="118" y1="250" x2="182" y2="250" stroke="${GUIDE_STROKE_SOFT}" stroke-width="1.4" stroke-dasharray="5 7" />
-    <line x1="104" y1="432" x2="196" y2="432" stroke="${GUIDE_STROKE}" stroke-width="1.8" />
+    <line x1="128" y1="66" x2="172" y2="66" stroke="${GUIDE_STROKE}" stroke-width="1.8" stroke-linecap="round" />
+    <line x1="142" y1="250" x2="158" y2="250" stroke="${GUIDE_STROKE_SOFT}" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="2 5" />
+    <line x1="118" y1="432" x2="182" y2="432" stroke="${GUIDE_STROKE}" stroke-width="1.8" stroke-linecap="round" />
   `);
 }
 

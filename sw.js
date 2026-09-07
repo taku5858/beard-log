@@ -1,6 +1,6 @@
 // Beard Log Service Worker — オフラインでも記録・閲覧ができるようアプリ本体をキャッシュする
 // 写真や記録データはIndexedDBに保存されており、このキャッシュには含まれない
-const CACHE_VERSION = "beardlog-v2";
+const CACHE_VERSION = "beardlog-v3";
 
 const PRECACHE_URLS = [
   "./",
@@ -40,7 +40,12 @@ self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
       .open(CACHE_VERSION)
-      .then((cache) => cache.addAll(PRECACHE_URLS))
+      .then((cache) =>
+        // HTTPキャッシュを必ずバイパスして、更新のたびに本当に新しいファイルを取得する
+        // （ここを素のcache.addAll()にすると、ホスティング側のキャッシュ次第で
+        // 更新後も古いJS/CSSがService Workerに取り込まれ続けることがある）
+        Promise.all(PRECACHE_URLS.map((url) => fetch(new Request(url, { cache: "reload" })).then((res) => cache.put(url, res))))
+      )
       .then(() => self.skipWaiting())
   );
 });
