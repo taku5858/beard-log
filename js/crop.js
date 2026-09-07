@@ -5,20 +5,20 @@ import { blobToObjectURL } from "./utils/image.js";
 const CROP_ASPECT = 4 / 5; // width / height
 const OUTPUT_HEIGHT = 1400;
 const OUTPUT_WIDTH = Math.round(OUTPUT_HEIGHT * CROP_ASPECT);
-const MIN_ZOOM = 1;
-const MAX_ZOOM = 4;
+const MIN_ZOOM = 1; // 保存枠全体を写真で覆える最小倍率
+const MAX_ZOOM = 3; // ヒゲを十分アップにできるが過剰には拡大させない上限
 const JPEG_QUALITY = 0.85;
 
 // トリミング画面を開いた瞬間の初期フォーカス。撮影ガイド（js/camera.js）が
 // 示す鼻下・口・あごの位置とできるだけ揃え、目や額ではなく「鼻下〜口〜あご」
 // （左右は頬〜口横〜あご〜フェイスライン、あご下はあご下〜首）が最初から
-// 枠の中央付近に来るようにする。x/yは元画像に対する割合（0〜1）、
-// zoomはMIN_ZOOM〜MAX_ZOOMの範囲での初期ズーム倍率。
+// 枠の中央付近に来るようにする。x/yは元画像に対する割合（0〜1）。
+// zoomは強くしすぎず、開いた直後から自由に拡大・縮小できる余地を残す。
 const INITIAL_FOCUS = {
-  front: { x: 0.5, y: 0.65, zoom: 1.3 },
-  left: { x: 0.38, y: 0.65, zoom: 1.3 },
-  right: { x: 0.62, y: 0.65, zoom: 1.3 },
-  chinUnder: { x: 0.5, y: 0.46, zoom: 1.25 },
+  front: { x: 0.5, y: 0.65, zoom: 1.15 },
+  left: { x: 0.38, y: 0.65, zoom: 1.15 },
+  right: { x: 0.62, y: 0.65, zoom: 1.15 },
+  chinUnder: { x: 0.5, y: 0.46, zoom: 1.1 },
 };
 
 function loadImage(blob) {
@@ -79,9 +79,8 @@ export function openCropEditor(sourceBlob, angle) {
     let zoom = 1;
     let offsetX = 0; // 表示中の元画像上の左上座標（元画像ピクセル基準）
     let offsetY = 0;
-    let frameW = 0;
+    let frameW = 0; // frame要素のCSSピクセルサイズ（drawImageの描画先はこの単位で統一する）
     let frameH = 0;
-    let dpr = Math.max(1, window.devicePixelRatio || 1);
     let ready = false;
 
     function close(result) {
@@ -103,13 +102,33 @@ export function openCropEditor(sourceBlob, angle) {
       offsetY = Math.min(Math.max(offsetY, 0), Math.max(0, naturalH - srcH));
     }
 
+    // CanvasはdevicePixelRatio分だけ内部解像度を上げてcrisp表示にしつつ、
+    // ctx.setTransformでCSSピクセル単位の座標系に揃えている。
+    // そのため描画コマンド側は必ずCSSピクセル値（frameW/frameH）を使うこと。
+    // ここをcanvas.width/heightのような「デバイスピクセル値」で描画すると、
+    // devicePixelRatioの分だけ二重にスケールされ、iPhoneのような高密度画面で
+    // 実際に見える範囲が想定よりずっと狭くなり、「少し動かしただけで端に
+    // 寄る／硬く感じる」原因になる。
     function render() {
       if (!ready) return;
       const s = displayScale();
       const srcW = frameW / s;
       const srcH = frameH / s;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(image, offsetX, offsetY, srcW, srcH, 0, 0, canvas.width, canvas.height);
+      ctx.clearRect(0, 0, frameW, frameH);
+      ctx.drawImage(image, offsetX, offsetY, srcW, srcH, 0, 0, frameW, frameH);
+    }
+
+    // 描画はrequestAnimationFrameで1フレームにつき1回だけにまとめる。
+    // pointermoveは端末によって非常に高頻度で発火するため、毎回同期的に
+    // Canvas再描画すると操作が「重い」と感じられる主因になっていた。
+    let renderScheduled = false;
+    function scheduleRender() {
+      if (renderScheduled) return;
+      renderScheduled = true;
+      requestAnimationFrame(() => {
+        renderScheduled = false;
+        render();
+      });
     }
 
     function setZoom(newZoom, focalX, focalY) {
@@ -123,22 +142,14 @@ export function openCropEditor(sourceBlob, angle) {
       offsetY = srcFocalY - focalY / s2;
       clampOffset();
       slider.value = String(Math.round(zoom * 100));
-      render();
-    }
-
-    function panBy(dxScreen, dyScreen) {
-      const s = displayScale();
-      offsetX -= dxScreen / s;
-      offsetY -= dyScreen / s;
-      clampOffset();
-      render();
+      scheduleRender();
     }
 
     function setupCanvasSize() {
       const rect = frame.getBoundingClientRect();
       frameW = rect.width;
       frameH = rect.height;
-      dpr = Math.max(1, window.devicePixelRatio || 1);
+      const dpr = Math.max(1, window.devicePixelRatio || 1);
       canvas.width = Math.round(frameW * dpr);
       canvas.height = Math.round(frameH * dpr);
       canvas.style.width = frameW + "px";
@@ -175,12 +186,19 @@ export function openCropEditor(sourceBlob, angle) {
     const activePointers = new Map();
     let pinchStartDist = 0;
     let pinchStartZoom = 1;
-    let pinchStartMid = { x: 0, y: 0 };
     let pinchStartSrcMid = { x: 0, y: 0 };
     let panStart = null;
+    // frameのgetBoundingClientRect()は1ジェスチャーにつき1回だけ計測してキャッシュする。
+    // pointermoveのたびに呼ぶとレイアウト計算が走り、ドラッグが重く感じられる原因になる。
+    let gestureRect = null;
+
+    function currentRect() {
+      if (!gestureRect) gestureRect = frame.getBoundingClientRect();
+      return gestureRect;
+    }
 
     function frameLocalPoint(clientX, clientY) {
-      const rect = frame.getBoundingClientRect();
+      const rect = currentRect();
       return { x: clientX - rect.left, y: clientY - rect.top };
     }
 
@@ -203,6 +221,7 @@ export function openCropEditor(sourceBlob, angle) {
       try {
         canvas.setPointerCapture(e.pointerId);
       } catch (err) {}
+      if (activePointers.size === 0) gestureRect = null; // 新しいジェスチャーの開始時だけ再計測
       const p = frameLocalPoint(e.clientX, e.clientY);
       activePointers.set(e.pointerId, p);
 
@@ -212,9 +231,9 @@ export function openCropEditor(sourceBlob, angle) {
         const [a, b] = pointersArray();
         pinchStartDist = distanceBetween(a, b);
         pinchStartZoom = zoom;
-        pinchStartMid = midpointBetween(a, b);
+        const mid = midpointBetween(a, b);
         const s = displayScale();
-        pinchStartSrcMid = { x: offsetX + pinchStartMid.x / s, y: offsetY + pinchStartMid.y / s };
+        pinchStartSrcMid = { x: offsetX + mid.x / s, y: offsetY + mid.y / s };
         panStart = null;
       }
     });
@@ -225,27 +244,30 @@ export function openCropEditor(sourceBlob, angle) {
       activePointers.set(e.pointerId, p);
 
       if (activePointers.size === 1 && panStart) {
+        // 指の移動量(スクリーンCSSピクセル)を表示スケールで割るだけの単純な1:1変換。
+        // 途中で再計算をはさまず常にジェスチャー開始点からの差分で求めるため、
+        // 誤差が蓄積して「飛ぶ」ことがない
         const dx = p.x - panStart.point.x;
         const dy = p.y - panStart.point.y;
         const s = displayScale();
         offsetX = panStart.offsetX - dx / s;
         offsetY = panStart.offsetY - dy / s;
         clampOffset();
-        render();
+        scheduleRender();
       } else if (activePointers.size === 2) {
         const [a, b] = pointersArray();
         const dist = distanceBetween(a, b);
         if (pinchStartDist > 0) {
           const ratio = dist / pinchStartDist;
-          const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, pinchStartZoom * ratio));
+          zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, pinchStartZoom * ratio));
           const mid = midpointBetween(a, b);
-          zoom = newZoom;
           const s2 = displayScale();
+          // ピンチ開始時に指の中心にあった元画像上の点を、常に現在の指の中心に保つ
           offsetX = pinchStartSrcMid.x - mid.x / s2;
           offsetY = pinchStartSrcMid.y - mid.y / s2;
           clampOffset();
           slider.value = String(Math.round(zoom * 100));
-          render();
+          scheduleRender();
         }
       }
     });
@@ -257,6 +279,7 @@ export function openCropEditor(sourceBlob, angle) {
         panStart = { offsetX, offsetY, point: remaining };
       } else if (activePointers.size === 0) {
         panStart = null;
+        gestureRect = null;
       }
     }
     canvas.addEventListener("pointerup", endPointer);
@@ -271,8 +294,9 @@ export function openCropEditor(sourceBlob, angle) {
       (e) => {
         if (!ready) return;
         e.preventDefault();
-        const p = frameLocalPoint(e.clientX, e.clientY);
-        const delta = e.deltaY > 0 ? -0.15 : 0.15;
+        const rect = frame.getBoundingClientRect();
+        const p = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        const delta = e.deltaY > 0 ? -0.12 : 0.12;
         setZoom(zoom + delta, p.x, p.y);
       },
       { passive: false }
