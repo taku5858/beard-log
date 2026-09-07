@@ -1,6 +1,6 @@
 // Beard Log Service Worker — オフラインでも記録・閲覧ができるようアプリ本体をキャッシュする
 // 写真や記録データはIndexedDBに保存されており、このキャッシュには含まれない
-const CACHE_VERSION = "beardlog-v4";
+const CACHE_VERSION = "beardlog-v5";
 
 const PRECACHE_URLS = [
   "./",

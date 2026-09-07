@@ -2,7 +2,7 @@ import { videoFrameToBlob, fileToProcessedBlob, blobToObjectURL } from "./utils/
 import { angleLabel } from "./constants.js";
 
 const GUIDE_HINT = {
-  front: "鼻下・口・あごをガイドに合わせてください",
+  front: "鼻下〜あごをガイドに合わせてください",
   left: "左頬〜あごのヒゲを大きく写してください",
   right: "右頬〜あごのヒゲを大きく写してください",
   chinUnder: "スマホを少し下げて、上を向いてください",
@@ -13,13 +13,20 @@ const GUIDE_HINT = {
 // ごく最小限の位置マークのみを薄く表示する。video要素の上に重ねるDOMオーバーレイ
 // なので、撮影データ（Canvasに描画されるのはvideoフレームのみ）には焼き込まれない。
 //
-// 以前は viewBox="0 0 300 500" + preserveAspectRatio="slice" を使っていたが、
-// 実機のカメラ画面の縦横比がその想定比率とずれると slice が上下を切り取ってしまい、
-// 中央のマークしか見えなくなる不具合があった。そのため viewBox は 0-100 の割合空間にし、
-// preserveAspectRatio="none" でコンテナに正確にフィットさせ、上下中央の3点が
-// どんな画面サイズでも必ず同時に見えるようにしている（直線だけなので非均等スケールでも歪まない）。
-const GUIDE_STROKE = "rgba(230, 198, 142, 0.68)";
-const GUIDE_STROKE_SOFT = "rgba(230, 198, 142, 0.45)";
+// viewBox は 0-100 の割合空間 + preserveAspectRatio="none" にし、画面サイズが
+// 変わってもマークが上下に切れないようにしている（直線だけなので非均等スケールでも歪まない）。
+//
+// 3点（鼻下/口/あご）の間隔は、画面を均等3分割するのではなく実際の顔の比率
+// （鼻下→口は短く、口→あごはその倍以上長い）に合わせ、画面高さの中央付近
+// 30〜40%程度にコンパクトにまとめている。これにより通常の自撮り距離から
+// 少し近づけるだけで3点を無理なく合わせられる。1mm単位の精密一致は不要で、
+// マークは目安として小さく・薄く表示する。
+const NOSE_Y = 33;
+const MOUTH_Y = 43; // 鼻下→口: 全体の約29%
+const CHIN_Y = 67; // 口→あご: 全体の約71%（span=34%は画面高さの30〜40%の範囲内）
+
+const GUIDE_STROKE = "rgba(230, 198, 142, 0.6)";
+const GUIDE_STROKE_SOFT = "rgba(230, 198, 142, 0.4)";
 
 function svgWrap(inner) {
   return `<svg class="camera-guide-svg" viewBox="0 0 100 100" preserveAspectRatio="none" fill="none">${inner}</svg>`;
@@ -30,50 +37,48 @@ function label(text, topPercent, leftPercent, align = "left") {
   return `<span class="camera-guide-label" style="top:${topPercent}%; left:${leftPercent}%; text-align:${align};">${text}</span>`;
 }
 
-// 正面クローズアップ: 鼻下（短い水平線）／口（小さな十字）／あご（短い水平線）の3点を常に同時表示
+// 正面クローズアップ: 鼻下（短い水平線）／口（小さな十字）／あご（短い水平線）の3点を
+// 顔の実比率でコンパクトに配置。許容範囲を持たせるため、目印は小さく薄くする
 function frontGuide() {
   const svg = svgWrap(`
-    <line x1="33" y1="13" x2="53" y2="13" stroke="${GUIDE_STROKE}" stroke-width="0.6" stroke-linecap="round" />
-    <line x1="50" y1="47" x2="50" y2="53" stroke="${GUIDE_STROKE}" stroke-width="0.6" stroke-linecap="round" />
-    <line x1="47" y1="50" x2="53" y2="50" stroke="${GUIDE_STROKE}" stroke-width="0.6" stroke-linecap="round" />
-    <line x1="30" y1="87" x2="50" y2="87" stroke="${GUIDE_STROKE}" stroke-width="0.6" stroke-linecap="round" />
+    <line x1="43" y1="${NOSE_Y}" x2="57" y2="${NOSE_Y}" stroke="${GUIDE_STROKE}" stroke-width="0.55" stroke-linecap="round" />
+    <line x1="50" y1="${MOUTH_Y - 2.2}" x2="50" y2="${MOUTH_Y + 2.2}" stroke="${GUIDE_STROKE_SOFT}" stroke-width="0.5" stroke-linecap="round" />
+    <line x1="47" y1="${MOUTH_Y}" x2="53" y2="${MOUTH_Y}" stroke="${GUIDE_STROKE_SOFT}" stroke-width="0.5" stroke-linecap="round" />
+    <line x1="41" y1="${CHIN_Y}" x2="59" y2="${CHIN_Y}" stroke="${GUIDE_STROKE}" stroke-width="0.55" stroke-linecap="round" />
   `);
-  return (
-    svg +
-    label("鼻下", 10.5, 56) +
-    label("口", 47.5, 56) +
-    label("あご", 84.5, 56)
-  );
+  return svg + label("鼻下", NOSE_Y, 60) + label("口", MOUTH_Y, 60) + label("あご", CHIN_Y, 62);
 }
 
-// 側面クローズアップ（頬〜口横〜あご〜フェイスライン）: 鼻先・口・あごの位置を示す小さな目印のみ
+// 側面クローズアップ（頬〜口横〜あご〜フェイスライン）: 鼻先・口・あごの位置を示す小さな目印のみ。
+// 正面と同じ顔比率（鼻下→口は短く、口→あごは長い）でコンパクトにまとめる
 function profileGuide(mirror) {
   const t = mirror ? ` transform="translate(100,0) scale(-1,1)"` : "";
   const svg = svgWrap(`
     <g${t}>
-      <line x1="61" y1="13" x2="71" y2="13" stroke="${GUIDE_STROKE}" stroke-width="0.55" stroke-linecap="round" />
-      <line x1="53" y1="50" x2="63" y2="50" stroke="${GUIDE_STROKE_SOFT}" stroke-width="0.55" stroke-linecap="round" stroke-dasharray="1.4 2.4" />
-      <line x1="47" y1="87" x2="57" y2="87" stroke="${GUIDE_STROKE}" stroke-width="0.55" stroke-linecap="round" />
+      <line x1="58" y1="${NOSE_Y}" x2="68" y2="${NOSE_Y}" stroke="${GUIDE_STROKE}" stroke-width="0.5" stroke-linecap="round" />
+      <line x1="54" y1="${MOUTH_Y}" x2="64" y2="${MOUTH_Y}" stroke="${GUIDE_STROKE_SOFT}" stroke-width="0.5" stroke-linecap="round" stroke-dasharray="1.4 2.4" />
+      <line x1="50" y1="${CHIN_Y}" x2="60" y2="${CHIN_Y}" stroke="${GUIDE_STROKE}" stroke-width="0.5" stroke-linecap="round" />
     </g>
   `);
-  const label1 = mirror ? label("鼻先", 10.5, 20, "right") : label("鼻先", 10.5, 74);
-  const label2 = mirror ? label("口", 47.5, 30, "right") : label("口", 47.5, 66);
-  const label3 = mirror ? label("あご", 84.5, 40, "right") : label("あご", 84.5, 60);
+  const label1 = mirror ? label("鼻先", NOSE_Y, 27, "right") : label("鼻先", NOSE_Y, 71);
+  const label2 = mirror ? label("口", MOUTH_Y, 31, "right") : label("口", MOUTH_Y, 67);
+  const label3 = mirror ? label("あご", CHIN_Y, 35, "right") : label("あご", CHIN_Y, 63);
   return svg + label1 + label2 + label3;
 }
 
-// あご下（任意）: 「この範囲に」を示す薄いコーナーガイドのみ（輪郭線・楕円は使わない）
+// あご下（任意）: 「この範囲に」を示す薄いコーナーガイドのみ。一人で前面カメラを
+// 少し下げて構えたときに無理なく収まる、控えめなサイズ・位置にする
 function chinUnderGuide() {
   const bracket = (x1, y1, dx, dy) => `
-    <path d="M${x1},${y1 + dy} L${x1},${y1} L${x1 + dx},${y1}" stroke="${GUIDE_STROKE}" stroke-width="0.6" stroke-linecap="round" />
+    <path d="M${x1},${y1 + dy} L${x1},${y1} L${x1 + dx},${y1}" stroke="${GUIDE_STROKE}" stroke-width="0.55" stroke-linecap="round" />
   `;
   const svg = svgWrap(`
-    ${bracket(24, 28, 11, 8)}
-    ${bracket(76, 28, -11, 8)}
-    ${bracket(24, 74, 11, -8)}
-    ${bracket(76, 74, -11, -8)}
+    ${bracket(32, 32, 9, 7)}
+    ${bracket(68, 32, -9, 7)}
+    ${bracket(32, 60, 9, -7)}
+    ${bracket(68, 60, -9, -7)}
   `);
-  return svg + label("あご下・首", 22, 50, "center");
+  return svg + label("あご下・首", 25, 50, "center");
 }
 
 const GUIDE_SVG = {
