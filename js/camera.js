@@ -1,5 +1,6 @@
-import { videoFrameToBlob, fileToProcessedBlob, blobToObjectURL } from "./utils/image.js";
+import { videoFrameToBlob, fileToProcessedBlob } from "./utils/image.js";
 import { angleLabel } from "./constants.js";
+import { openCropEditor } from "./crop.js";
 
 const GUIDE_HINT = {
   front: "鼻下〜あごをガイドに合わせてください",
@@ -101,7 +102,6 @@ export function openCameraCapture(angle) {
       </div>
       <div class="camera-stage">
         <video class="camera-video" playsinline autoplay muted></video>
-        <canvas class="camera-preview-canvas" hidden></canvas>
         <div class="camera-guide guide-${angle}">${GUIDE_SVG[angle] || ""}</div>
         <p class="camera-hint">${GUIDE_HINT[angle] || ""}</p>
         <p class="camera-error" hidden></p>
@@ -111,12 +111,6 @@ export function openCameraCapture(angle) {
         <button type="button" class="shutter-btn" data-act="shutter" aria-label="撮影する"></button>
         <span class="camera-controls-spacer"></span>
       </div>
-      <div class="camera-review" hidden>
-        <div class="camera-review-actions">
-          <button type="button" class="btn btn-ghost" data-act="retake">撮り直す</button>
-          <button type="button" class="btn btn-primary" data-act="use">この写真を使う</button>
-        </div>
-      </div>
       <input type="file" accept="image/*" capture="user" class="file-input-capture" hidden />
       <input type="file" accept="image/*" class="file-input-library" hidden />
     `;
@@ -124,17 +118,13 @@ export function openCameraCapture(angle) {
     document.body.classList.add("no-scroll");
 
     const video = overlay.querySelector(".camera-video");
-    const previewCanvas = overlay.querySelector(".camera-preview-canvas");
     const errorEl = overlay.querySelector(".camera-error");
-    const stage = overlay.querySelector(".camera-stage");
-    const controls = overlay.querySelector(".camera-controls");
-    const review = overlay.querySelector(".camera-review");
     const fileInputCapture = overlay.querySelector(".file-input-capture");
     const fileInputLibrary = overlay.querySelector(".file-input-library");
 
     let stream = null;
     let facingMode = "user";
-    let capturedBlob = null;
+    let processing = false;
 
     async function startStream() {
       errorEl.hidden = true;
@@ -180,34 +170,18 @@ export function openCameraCapture(angle) {
         fileInputCapture.click();
         return;
       }
-      capturedBlob = await videoFrameToBlob(video, { mirror: facingMode === "user" });
-      showReview(capturedBlob);
+      const blob = await videoFrameToBlob(video, { mirror: facingMode === "user" });
+      await handleCaptured(blob);
     }
 
-    function showReview(blob) {
-      const url = blobToObjectURL(blob);
-      previewCanvas.hidden = false;
-      stage.querySelector(".camera-guide")?.classList.add("hidden");
-      video.hidden = true;
-      const img = new Image();
-      img.onload = () => {
-        previewCanvas.width = img.width;
-        previewCanvas.height = img.height;
-        previewCanvas.getContext("2d").drawImage(img, 0, 0);
-        URL.revokeObjectURL(url);
-      };
-      img.src = url;
-      controls.hidden = true;
-      review.hidden = false;
-    }
-
-    function backToLive() {
-      previewCanvas.hidden = true;
-      stage.querySelector(".camera-guide")?.classList.remove("hidden");
-      video.hidden = false;
-      controls.hidden = false;
-      review.hidden = true;
-      capturedBlob = null;
+    // 撮影 or ライブラリ選択の直後に必ずトリミング画面を挟み、ヒゲ部分だけを
+    // 保存範囲に収める。キャンセルされたらライブのカメラ画面に戻って撮り直せる。
+    async function handleCaptured(blob) {
+      if (processing) return;
+      processing = true;
+      const cropped = await openCropEditor(blob, angle);
+      processing = false;
+      if (cropped) close(cropped);
     }
 
     overlay.addEventListener("click", async (e) => {
@@ -221,22 +195,22 @@ export function openCameraCapture(angle) {
         startStream();
       } else if (act === "shutter") doCapture();
       else if (act === "library") fileInputLibrary.click();
-      else if (act === "retake") backToLive();
-      else if (act === "use") close(capturedBlob);
     });
 
     fileInputCapture.addEventListener("change", async () => {
       const file = fileInputCapture.files[0];
       if (!file) return;
       const blob = await fileToProcessedBlob(file);
-      close(blob);
+      await handleCaptured(blob);
+      fileInputCapture.value = "";
     });
 
     fileInputLibrary.addEventListener("change", async () => {
       const file = fileInputLibrary.files[0];
       if (!file) return;
       const blob = await fileToProcessedBlob(file);
-      close(blob);
+      await handleCaptured(blob);
+      fileInputLibrary.value = "";
     });
 
     startStream();
