@@ -153,7 +153,7 @@ export async function renderRecord(root, params) {
           ${state.url ? `<img src="${state.url}" alt="${angle.label}">` : `<span class="photo-slot-placeholder">＋</span>`}
         </div>
         <div class="photo-slot-foot">
-          <span class="photo-slot-label">${angle.label}</span>
+          <span class="photo-slot-label">${angle.label}${angle.optional ? `<span class="photo-slot-optional">任意</span>` : ""}</span>
           ${state.url ? `<button type="button" class="photo-slot-remove" data-act="remove-photo" data-angle="${angle.key}">削除</button>` : ""}
         </div>
       </div>

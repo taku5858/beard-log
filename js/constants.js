@@ -12,7 +12,7 @@ export const PHOTO_ANGLES = [
   { key: "front", label: "正面" },
   { key: "left", label: "左" },
   { key: "right", label: "右" },
-  { key: "chinUnder", label: "あご下" },
+  { key: "chinUnder", label: "あご下", optional: true },
 ];
 
 export const LASER_TYPES = ["アレキサンドライト", "ヤグ", "ダイオード", "不明", "その他"];
