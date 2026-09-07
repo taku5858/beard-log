@@ -9,6 +9,18 @@ const MIN_ZOOM = 1;
 const MAX_ZOOM = 4;
 const JPEG_QUALITY = 0.85;
 
+// トリミング画面を開いた瞬間の初期フォーカス。撮影ガイド（js/camera.js）が
+// 示す鼻下・口・あごの位置とできるだけ揃え、目や額ではなく「鼻下〜口〜あご」
+// （左右は頬〜口横〜あご〜フェイスライン、あご下はあご下〜首）が最初から
+// 枠の中央付近に来るようにする。x/yは元画像に対する割合（0〜1）、
+// zoomはMIN_ZOOM〜MAX_ZOOMの範囲での初期ズーム倍率。
+const INITIAL_FOCUS = {
+  front: { x: 0.5, y: 0.65, zoom: 1.3 },
+  left: { x: 0.38, y: 0.65, zoom: 1.3 },
+  right: { x: 0.62, y: 0.65, zoom: 1.3 },
+  chinUnder: { x: 0.5, y: 0.46, zoom: 1.25 },
+};
+
 function loadImage(blob) {
   return new Promise((resolve, reject) => {
     const url = blobToObjectURL(blob);
@@ -143,11 +155,15 @@ export function openCropEditor(sourceBlob, angle) {
         naturalH = image.naturalHeight || image.height;
         setupCanvasSize();
         baseScale = Math.max(frameW / naturalW, frameH / naturalH);
-        zoom = 1;
+        const focus = INITIAL_FOCUS[angle] || { x: 0.5, y: 0.5, zoom: 1 };
+        zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, focus.zoom));
         const srcW = frameW / displayScale();
         const srcH = frameH / displayScale();
-        offsetX = (naturalW - srcW) / 2;
-        offsetY = (naturalH - srcH) / 2;
+        // フレーム中央に来てほしい元画像上の焦点を中心に初期表示範囲を組み立てる
+        offsetX = naturalW * focus.x - srcW / 2;
+        offsetY = naturalH * focus.y - srcH / 2;
+        clampOffset();
+        slider.value = String(Math.round(zoom * 100));
         ready = true;
         render();
       } catch (e) {
