@@ -19,4 +19,12 @@ if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("sw.js").catch(() => {});
   });
+  // 新しいService Workerが有効になったら1回だけ自動で再読み込みし、
+  // 更新後も古いキャッシュ（写真撮影ガイドなど）が表示され続けないようにする
+  let reloading = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (reloading) return;
+    reloading = true;
+    location.reload();
+  });
 }

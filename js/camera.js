@@ -2,59 +2,54 @@ import { videoFrameToBlob, fileToProcessedBlob, blobToObjectURL } from "./utils/
 import { angleLabel } from "./constants.js";
 
 const GUIDE_HINT = {
-  front: "鼻下からあご下までを大きく写してください",
+  front: "鼻下とあごをガイドに合わせてください",
   left: "左頬〜あごのヒゲを大きく写してください",
   right: "右頬〜あごのヒゲを大きく写してください",
   chinUnder: "スマホを少し下げて、上を向いてください",
 };
 
-// このアプリは「顔写真」ではなく「ヒゲが生えている範囲」を毎回同じ倍率・位置で
-// 記録することが目的。ガイドは細く半透明なマークのみとし、映像のヒゲが見えにくく
-// ならないようにする。video要素の上に重ねるDOMオーバーレイなので、
-// 撮影データ（Canvasに描画されるのはvideoフレームのみ）には一切焼き込まれない。
-const GUIDE_STROKE = "rgba(230, 198, 142, 0.6)";
-const GUIDE_STROKE_SOFT = "rgba(230, 198, 142, 0.35)";
+// このアプリは「顔写真」ではなく「ヒゲが生えている範囲」を毎回ほぼ同じ倍率・構図で
+// 記録することが目的。顔全体の位置合わせや輪郭線・楕円は使わず、鼻下・口・あごなど
+// ごく最小限の位置マークのみを薄く表示する。video要素の上に重ねるDOMオーバーレイ
+// なので、撮影データ（Canvasに描画されるのはvideoフレームのみ）には焼き込まれない。
+const GUIDE_STROKE = "rgba(230, 198, 142, 0.55)";
+const GUIDE_STROKE_SOFT = "rgba(230, 198, 142, 0.32)";
 
 function svgWrap(inner) {
   return `<svg class="camera-guide-svg" viewBox="0 0 300 500" preserveAspectRatio="xMidYMid slice" fill="none">${inner}</svg>`;
 }
 
-// 正面クローズアップ: 鼻の下端 / 口の位置（画面中央） / あごの下端 を薄いマークで示す
+// 正面クローズアップ: 鼻の下端／口の位置／あごの下端 だけを示す3本の目印線
 function frontGuide() {
   return svgWrap(`
-    <path d="M124,58 Q150,74 176,58" stroke="${GUIDE_STROKE}" stroke-width="1.6" stroke-linecap="round" />
-    <line x1="106" y1="250" x2="194" y2="250" stroke="${GUIDE_STROKE_SOFT}" stroke-width="1.4" stroke-dasharray="5 7" />
-    <line x1="88" y1="432" x2="212" y2="432" stroke="${GUIDE_STROKE}" stroke-width="1.8" />
-    <line x1="150" y1="58" x2="150" y2="432" stroke="${GUIDE_STROKE_SOFT}" stroke-width="1" stroke-dasharray="2 9" />
-    <line x1="52" y1="100" x2="52" y2="400" stroke="${GUIDE_STROKE_SOFT}" stroke-width="1" stroke-dasharray="3 8" />
-    <line x1="248" y1="100" x2="248" y2="400" stroke="${GUIDE_STROKE_SOFT}" stroke-width="1" stroke-dasharray="3 8" />
+    <path d="M126,64 Q150,78 174,64" stroke="${GUIDE_STROKE}" stroke-width="1.6" stroke-linecap="round" />
+    <line x1="118" y1="250" x2="182" y2="250" stroke="${GUIDE_STROKE_SOFT}" stroke-width="1.4" stroke-dasharray="5 7" />
+    <line x1="104" y1="432" x2="196" y2="432" stroke="${GUIDE_STROKE}" stroke-width="1.8" />
   `);
 }
 
-// 側面クローズアップ（頬〜口横〜あご〜フェイスライン）。右向きを基準に作り、左は水平反転して使う
+// 側面クローズアップ（頬〜口横〜あご〜フェイスライン）: 鼻先・口・あごの位置を示す小さな目印のみ
 function profileGuide(mirror) {
   const t = mirror ? ` transform="translate(300,0) scale(-1,1)"` : "";
   return svgWrap(`
     <g${t}>
-      <path d="M204,54 C214,110 202,156 186,196 C174,226 168,236 158,258
-               C148,282 148,314 144,346 C140,382 138,410 138,440"
-        stroke="${GUIDE_STROKE}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-      <line x1="178" y1="60" x2="216" y2="60" stroke="${GUIDE_STROKE_SOFT}" stroke-width="1.2" stroke-dasharray="3 6" />
-      <line x1="152" y1="240" x2="192" y2="240" stroke="${GUIDE_STROKE_SOFT}" stroke-width="1.2" stroke-dasharray="3 6" />
-      <line x1="124" y1="410" x2="164" y2="410" stroke="${GUIDE_STROKE_SOFT}" stroke-width="1.2" stroke-dasharray="3 6" />
+      <line x1="184" y1="66" x2="212" y2="66" stroke="${GUIDE_STROKE}" stroke-width="1.5" stroke-linecap="round" />
+      <line x1="160" y1="242" x2="192" y2="242" stroke="${GUIDE_STROKE_SOFT}" stroke-width="1.3" stroke-dasharray="4 6" />
+      <line x1="140" y1="416" x2="172" y2="416" stroke="${GUIDE_STROKE}" stroke-width="1.5" stroke-linecap="round" />
     </g>
   `);
 }
 
-// あご下（任意）: あご下の境界ライン ＋ フェイスラインの続き ＋ 首上部の目安
+// あご下（任意）: 「この範囲に」を示す薄いコーナーガイドのみ（輪郭線・楕円は使わない）
 function chinUnderGuide() {
+  const bracket = (x1, y1, dx, dy) => `
+    <path d="M${x1},${y1 + dy} L${x1},${y1} L${x1 + dx},${y1}" stroke="${GUIDE_STROKE}" stroke-width="1.6" stroke-linecap="round" />
+  `;
   return svgWrap(`
-    <path d="M70,140 C70,192 106,224 150,224 C194,224 230,192 230,140"
-      stroke="${GUIDE_STROKE}" stroke-width="1.6" />
-    <line x1="150" y1="118" x2="150" y2="140" stroke="${GUIDE_STROKE_SOFT}" stroke-width="1.2" stroke-dasharray="2 6" />
-    <line x1="104" y1="224" x2="104" y2="420" stroke="${GUIDE_STROKE_SOFT}" stroke-width="1.1" stroke-dasharray="3 7" />
-    <line x1="196" y1="224" x2="196" y2="420" stroke="${GUIDE_STROKE_SOFT}" stroke-width="1.1" stroke-dasharray="3 7" />
-    <line x1="90" y1="392" x2="210" y2="392" stroke="${GUIDE_STROKE_SOFT}" stroke-width="1.1" stroke-dasharray="3 7" />
+    ${bracket(76, 150, 34, 34)}
+    ${bracket(224, 150, -34, 34)}
+    ${bracket(76, 372, 34, -34)}
+    ${bracket(224, 372, -34, -34)}
   `);
 }
 
